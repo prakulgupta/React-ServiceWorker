@@ -45,11 +45,32 @@ export const actionCreators = {
         // Only load data if it's something we don't already have (and are not already loading)
         const appState = getState();
         if (appState && appState.weatherForecasts && startDateIndex !== appState.weatherForecasts.startDateIndex) {
+            if (navigator.serviceWorker.controller) {
+
+                navigator.serviceWorker.onmessage = function(event) {
+                    console.log("Broadcasted SW : ", event.data);
+            
+                    var data = event.data;
+            
+                    if (data.command == "broadcastOnRequest") {
+                        console.log("Broadcastedage from the ServiceWorker : ", data.message);
+                        let res = data.message;
+                        setTimeout(()=>{
+                            dispatch({ type: 'RECEIVE_WEATHER_FORECASTS', startDateIndex: startDateIndex, forecasts: res });
+                        }, 1000);
+                    }
+                };
+            }
             let url = `weatherforecast/${startDateIndex}`;
             fetch(url)
-                .then(response => response.json() as Promise<WeatherForecast[]>)
+                .then(
+                    response => response.json() as Promise<WeatherForecast[]>
+                )
                 .then(data => {
-                    dispatch({ type: 'RECEIVE_WEATHER_FORECASTS', startDateIndex: startDateIndex, forecasts: data });
+                    if (data) {
+                        dispatch({ type: 'RECEIVE_WEATHER_FORECASTS', startDateIndex: startDateIndex, forecasts: data });
+                    }
+
                 });
 
             dispatch({ type: 'REQUEST_WEATHER_FORECASTS', startDateIndex: startDateIndex });

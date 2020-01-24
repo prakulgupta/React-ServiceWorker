@@ -16,7 +16,8 @@ self.addEventListener('fetch', function (event) {
             .then(function (response) {
                 // Cache hit - return response
                 if (response) {
-                    console.log("Response from cache")
+                    console.log("Response from cache");
+                    fetctDataFromApi(event);
                     return response;
                 }
                 return fetch(event.request).then(
@@ -25,7 +26,7 @@ self.addEventListener('fetch', function (event) {
                         if (!response || response.status !== 200 || response.type !== 'basic') {
                             return response;
                         }
-                        updateCache(response, event.request);
+                        updateCache(response, event.request.url);
                         console.log("Response from api call")
                         return response;
                     }
@@ -33,6 +34,27 @@ self.addEventListener('fetch', function (event) {
             }))
 });
 
+function fetctDataFromApi(event) {
+    fetch(event.request).then(response => {
+        updateCache(response, event.request.url)
+        return response.json()
+    }
+    )
+        .then(
+            data => {
+                if (data) {
+                    self.clients.matchAll().then(function (clients) {
+                        clients.forEach(function (client) {
+                            client.postMessage({
+                                "command": "broadcastOnRequest",
+                                "message": data
+                            });
+                        })
+                    })
+                }
+            }
+        )
+}
 
 self.addEventListener('sync', function (event) {
     if (event.tag.indexOf('weatherforecast') > -1) {
@@ -41,7 +63,22 @@ self.addEventListener('sync', function (event) {
     }
 });
 
-function updateCache(response, tag){
+self.addEventListener('message', function (event) {
+    var data = event.data;
+
+    if (data.command == "oneWayCommunication") {
+        console.log("Message the Page : ", data.message);
+    }
+
+    if (data.command == "twoWayCommunication") {
+        console.log("Respondingessage from the Page: ", data.message);
+        event.ports[0].postMessage({
+            "message": "Hi, Page"
+        });
+    }
+});
+
+function updateCache(response, tag) {
     if (response.url.indexOf("weatherforecast") > -1) {
         console.log("Updating Cache");
         // IMPORTANT: Clone the response. A response is a stream
@@ -52,15 +89,16 @@ function updateCache(response, tag){
 
         caches.open("WeatherData")
             .then(function (cache) {
-                cache.put(tag, responseToCache);
+                cache.put(`${tag}`, responseToCache);
             });
 
     }
 }
 function updateWeatherForecast(tag) {
-    fetch(`https://localhost:44353${tag}`)
+    fetch(`https://localhost:44353/${tag}`)
         .then(function (response) {
             updateCache(response, tag);
+            return response;
         })
         .catch(function (error) {
             console.log('Request failed', error);
